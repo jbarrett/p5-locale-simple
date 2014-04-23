@@ -12,6 +12,7 @@ use Try::Tiny;
 use curry;
 
 has func_qr => ( is => 'ro', default => sub { qr/\bl(|n|p|np|d|dn|dnp)\b/ } );
+has func_qr_hb => ( is => 'ro', default => sub { qr/{{\bl(|n|p|np|d|dn|dnp)\b/ } );
 has found   => ( is => 'ro', default => sub { [] } );
 has type => ( is => 'ro', required => 1 );
 
@@ -25,7 +26,9 @@ sub parse {
 
 sub noise {
     my ( $self ) = @_;
-    my $noise = $self->substring_before( $self->func_qr );
+    my $noise = $self->substring_before(
+        ($self->type eq 'hb')? $self->func_qr_hb : $self->func_qr
+    );
     $self->fail( "no noise found" ) if !length $noise;
     $self->debug( "discarded %d characters of noise", length $noise );
     return $noise;
@@ -34,12 +37,15 @@ sub noise {
 sub call {
     my ( $self ) = @_;
 
-    my $func = $self->expect( $self->func_qr );
+    my $func = $self->expect(
+        ($self->type eq 'hb')? $self->func_qr_hb : $self->func_qr
+    );
     my $line = ( $self->where )[0];
     $self->debug( "found func $func at line %d", $line );
 
     try {
         my $arguments = $self->arguments( $func );
+        $func =~ s/{//g;
         push @{ $self->found }, { func => $func, args => $arguments, line => $line };
     }
     catch {
@@ -53,7 +59,9 @@ sub call {
 sub arguments {
     my ( $self, $func ) = @_;
 
-    my @arguments = ( $self->op( "(" ), $self->required_args( $func ), $self->extra_arguments, $self->op( ")" ) );
+    my @arguments = ( ($self->type eq 'hb') ?
+        ( $self->op( " " ), $self->required_args_hb( $func ), $self->extra_arguments, $self->op( "}" )) :
+        ( $self->op( "(" ), $self->required_args( $func ), $self->extra_arguments, $self->op( ")" )) );
     $self->debug( "found %d arguments", scalar @arguments );
 
     return \@arguments;
@@ -88,12 +96,27 @@ sub required_args {
     return $self->collect_from( $arg_lists{$func} );
 }
 
+sub required_args_hb {
+    my ( $self, $func ) = @_;
+    my %arg_lists = (
+        '{{l'    => [qw( tr_token )],
+        '{{ln'   => [qw( tr_token    plural_token  plural_count )],
+        '{{lp'   => [qw( context_id  tr_token )],
+        '{{lnp'  => [qw( context_id  tr_token      plural_token  plural_count )],
+        '{{ld'   => [qw( domain_id   tr_token )],
+        '{{ldn'  => [qw( domain_id   tr_token      plural_token  plural_count )],
+        '{{ldnp' => [qw( domain_id   context_id    tr_token      plural_token  plural_count )],
+    );
+    return $self->collect_from( $arg_lists{$func} );
+}
+
 sub tr_token     { shift->named_token( "translation token" ) }
 sub plural_token { shift->named_token( "plural translation token" ) }
 sub plural_count { shift->named_token( "count of plural entity", "token_int" ) }
 sub context_id   { shift->named_token( "context id" ) }
 sub domain_id    { shift->named_token( "domain id" ) }
 sub comma        { shift->op( "," ) }
+sub space        { shift->op( " " ) }
 sub variable     { shift->expect( qr/[\w\.]+/ ) }
 
 sub constant_string {
@@ -113,7 +136,7 @@ sub constant_string {
 }
 
 sub concat_op {
-    my %ops = ( js => "+", pl => ".", tx => "_", py => "+" );
+    my %ops = ( js => "+", pl => ".", tx => "_", py => "+", hb => "}" );
     return $ops{ shift->type };
 }
 

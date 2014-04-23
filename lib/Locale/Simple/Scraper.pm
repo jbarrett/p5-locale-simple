@@ -25,6 +25,7 @@ sub scrape {
     my $pl_ext = "";    # Perl
     my $py_ext = "";    # Python
     my $tx_ext = "";    # Text::Xslate (Kolon or Metakolon)
+    my $hb_ext = "";    # Handlebars.js with helper functions
 
     my @ignores;
     my @only;
@@ -58,12 +59,16 @@ sub scrape {
     my @py = split( ",", $py_ext );
     push @py, 'py';
 
+    my @hb = split( ",", $hb_ext );
+    push @hb, 'handlebars';
+
     # extension list
     my %e = (
         ( map { $_ => 'js' } @js ),
         ( map { $_ => 'pl' } @pl ),
         ( map { $_ => 'tx' } @tx ),
         ( map { $_ => 'py' } @py ),
+        ( map { $_ => 'hb' } @hb ),
     );
 
     # functions with count of locale simple with function of parameter
